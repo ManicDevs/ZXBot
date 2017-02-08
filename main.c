@@ -104,70 +104,79 @@ int main(int argc, char *argv[])
 	init_signals();
 #endif
 	init_uniq_id();
-	
-	while((sockfd = net_connect("localhost", "3448", IPPROTO_TCP)) <= 0)
-	{
-		if(exiting)
-			break;
-#ifdef DEBUG
-		util_msgc("Info", "Unable to connect, retrying...");
-#endif
-		util_sleep(1);
-	}
-	
+
 	while(!exiting)
-	{
-		ssize_t buflen;
-		char pktbuf[512];
-		
-		struct Packet pkt;
-		
-		memset(pktbuf, 0, sizeof(pktbuf));
-		
-		while(memset(pktbuf, 0, sizeof(pktbuf)) && 
-			(buflen = recv(sockfd, pktbuf, sizeof(pktbuf), 0)))
+	{	
+		while((sockfd = net_connect("localhost", "3448", IPPROTO_TCP)) <= 0)
 		{
 			if(exiting)
 				break;
-			
-			if(buflen != sizeof(struct Packet))
-				continue;
-			
-			memcpy(&pkt, pktbuf, buflen);
-			
-			util_strxor(pkt.msg.payload, pkt.msg.payload, pkt.msg.length);
-			
-			printf("payload1: %s\r\n", pkt.msg.payload);
-			
 #ifdef DEBUG
-			// Packet received
-			util_msgc("Info", "We've received a %s!", util_type2str(pkt.type));
+			util_msgc("Info", "Unable to connect, retrying...");
 #endif
-			switch(pkt.type)
+			util_sleep(1);
+		}
+		
+		while(!exiting)
+		{
+			ssize_t buflen;
+			char pktbuf[512];
+			
+			struct Packet pkt;
+			
+			memset(pktbuf, 0, sizeof(pktbuf));
+			
+			if(read(sockfd, pktbuf, 1) == 0)
 			{
-				case PING:
-#ifdef DEBUG
-					util_msgc("Info", "Ping from cnc!");
-#endif
-					net_fdsend(sockfd, PONG, "");
+				close(sockfd);
 				break;
+			}
+			
+			memset(pktbuf, 0, sizeof(pktbuf));
+			
+			while(memset(pktbuf, 0, sizeof(pktbuf)) && 
+				(buflen = recv(sockfd, pktbuf, sizeof(pktbuf), 0)))
+			{
+				if(exiting)
+					break;
 				
-				case VERSION:
-#ifdef DEBUG
-					util_msgc("Info", "Version from cnc!");
-#endif
-					net_fdsend(sockfd, VERSION, VERSIONSTR);
-				break;
+				if(buflen != sizeof(struct Packet))
+					continue;
 				
-				case MESSAGE:
+				memcpy(&pkt, pktbuf, buflen);
+				
+				util_strxor(pkt.msg.payload, pkt.msg.payload, pkt.msg.length);
+				
 #ifdef DEBUG
-					util_msgc("Info", "Message from cnc!");
-					util_msgc("Message", "Payload: %s", pkt.msg.payload);
+				// Packet received
+				util_msgc("Info", "We've received a %s!", util_type2str(pkt.type));
 #endif
-				break;
-			} // Switch
+				switch(pkt.type)
+				{
+					case PING:
+#ifdef DEBUG
+						util_msgc("Info", "Ping from cnc!");
+#endif
+						net_fdsend(sockfd, PONG, "");
+					break;
+					
+					case VERSION:
+#ifdef DEBUG
+						util_msgc("Info", "Version from cnc!");
+#endif
+						net_fdsend(sockfd, VERSION, VERSIONSTR);
+					break;
+					
+					case MESSAGE:
+#ifdef DEBUG
+						util_msgc("Info", "Message from cnc!");
+						util_msgc("Message", "Payload: %s", pkt.msg.payload);
+#endif
+					break;
+				} // Switch
+			} // While
+			sleep(1);
 		} // While
-		sleep(1);
 	} // While
 	
 	close(sockfd);
