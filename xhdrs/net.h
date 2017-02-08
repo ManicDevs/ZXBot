@@ -1,6 +1,8 @@
 #ifndef NET_H
 #define NET_H
 
+ipv4_t net_local_addr(void);
+
 int net_fdsend(int sockfd, int type, char *buffer);
 
 int net_set_nonblocking(int sockfd);

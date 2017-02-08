@@ -8,7 +8,6 @@ enum
 {
 	PING,
 	PONG,
-	VERSION,
 	MESSAGE
 };
 
