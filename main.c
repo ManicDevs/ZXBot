@@ -41,8 +41,7 @@ static void sigexit(int signo)
 
 static void sigsegv(int signo)
 {
-    printf("Got SIGSEGV");
-    init_exit();
+	init_exit();
 	_exit(EXIT_FAILURE);
 }
 
