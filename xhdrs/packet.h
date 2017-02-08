@@ -8,7 +8,8 @@ enum
 {
 	PING,
 	PONG,
-	ERROR
+	VERSION,
+	MESSAGE
 };
 
 struct Message

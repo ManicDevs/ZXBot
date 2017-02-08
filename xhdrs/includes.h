@@ -5,4 +5,6 @@
 
 #define DEBUG 1
 
+#define VERSIONSTR "v0.1-beta"
+
 #endif /* packet_h */

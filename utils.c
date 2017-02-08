@@ -71,8 +71,10 @@ char *util_type2str(int type)
 			return "PING";
 		case PONG:
 			return "PONG";
-		case ERROR:
-			return "ERROR";
+		case VERSION:
+			return "VERSION";
+		case MESSAGE:
+			return "MESSAGE";
 		default:
 			return "<unknown>";
 	}
