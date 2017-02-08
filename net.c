@@ -37,7 +37,9 @@ ipv4_t net_local_addr(void)
 	err = getaddrinfo("8.8.8.8", "53", &hints, &result);
 	if(err < 0)
 	{
+#ifdef DEBUG
 		util_msgc("Error", "Failed to Getaddrinfo!");
+#endif
 		return -1;
 	}
 	
@@ -49,8 +51,10 @@ ipv4_t net_local_addr(void)
 		
 		if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(int)) < 0)
 		{
+#ifdef DEBUG
 			util_msgc("Warning", "Unable to set SO_REUSEADDR: %s",  
 				strerror(errno));
+#endif
 		}
 		
 		tv.tv_sec = 5;
@@ -59,15 +63,19 @@ ipv4_t net_local_addr(void)
 		if(setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, 
 						(struct timeval*)&tv, sizeof(struct timeval)))
 		{
+#ifdef DEBUG
 			util_msgc("Warning", "Unable to set SO_RCVTIMEO: %s",  
 				strerror(errno));
+#endif
 		}
 		
 		if(setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, 
 						(struct timeval*)&tv, sizeof(struct timeval)))
 		{
+#ifdef DEBUG
 			util_msgc("Warning", "Unable to set SO_RCVTIMEO: %s",  
 				strerror(errno));
+#endif
 		}
 		
 		if((err = connect(sockfd, rp->ai_addr, rp->ai_addrlen)) < 0)
@@ -85,14 +93,18 @@ ipv4_t net_local_addr(void)
 	
 	if(sockfd < 0)
 	{
+#ifdef DEBUG
 		util_msgc("Error", "Failed to connect: %s", strerror(errno));
+#endif
 		return -1;
 	}
 	
 	if(net_set_nonblocking(sockfd) < 0)
 	{
+#ifdef DEBUG
 		util_msgc("Error", "Failed to make socket nonblocking: %s", 
 			strerror(errno));
+#endif
 		return -1;
 	}
 	
@@ -120,7 +132,9 @@ int net_fdsend(int sockfd, int type, char *buffer)
 	
 	if(send(sockfd, &pkt, sizeof(pkt), MSG_NOSIGNAL) < 0)
 	{
+#ifdef DEBUG
 		util_msgc("Error", "Unable to send Packet!");
+#endif
 		return 1;
 	}
 	
@@ -163,7 +177,9 @@ int net_bind(const char *portno, int protocol)
 	err = getaddrinfo(NULL, portno, &hints, &result);
 	if(err < 0)
 	{
+#ifdef DEBUG
 		util_msgc("Error", "Failed to Getaddrinfo!");
+#endif
 		return -1;
 	}
 	
@@ -175,8 +191,10 @@ int net_bind(const char *portno, int protocol)
 		
 		if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(int)) < 0)
 		{
+#ifdef DEBUG
 			util_msgc("Warning", "Unable to set SO_REUSEADDR: %s",  
 				strerror(errno));
+#endif
 		}
 		
 		err = bind(sockfd, rp->ai_addr, rp->ai_addrlen);
@@ -189,7 +207,9 @@ int net_bind(const char *portno, int protocol)
 	
 	if(rp == NULL)
 	{
+#ifdef DEBUG
 		util_msgc("Error", "Could not bind!");
+#endif
 		return -1;
 	}
 	
@@ -216,7 +236,9 @@ int net_connect(const char *addr, const char *portno, int protocol)
 	err = getaddrinfo(addr, portno, &hints, &result);
 	if(err < 0)
 	{
+#ifdef DEBUG
 		util_msgc("Error", "Failed to Getaddrinfo!");
+#endif
 		return -1;
 	}
 	
@@ -228,8 +250,10 @@ int net_connect(const char *addr, const char *portno, int protocol)
 		
 		if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(int)) < 0)
 		{
+#ifdef DEBUG
 			util_msgc("Warning", "Unable to set SO_REUSEADDR: %s",  
 				strerror(errno));
+#endif
 		}
 		
 		tv.tv_sec = 5;
@@ -238,15 +262,19 @@ int net_connect(const char *addr, const char *portno, int protocol)
 		if(setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, 
 						(struct timeval*)&tv, sizeof(struct timeval)))
 		{
+#ifdef DEBUG
 			util_msgc("Warning", "Unable to set SO_RCVTIMEO: %s",  
 				strerror(errno));
+#endif
 		}
 		
 		if(setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, 
 						(struct timeval*)&tv, sizeof(struct timeval)))
 		{
+#ifdef DEBUG
 			util_msgc("Warning", "Unable to set SO_RCVTIMEO: %s",  
 				strerror(errno));
+#endif
 		}
 		
 		if((err = connect(sockfd, rp->ai_addr, rp->ai_addrlen)) < 0)
@@ -264,21 +292,24 @@ int net_connect(const char *addr, const char *portno, int protocol)
 	
 	if(sockfd < 0)
 	{
-		util_msgc("Error", (protocol == IPPROTO_TCP)?
-			"Failed to connect: %s":
-			"Failed to sendto: %s", 
-			strerror(errno));
+#ifdef DEBUG
+		util_msgc("Error", "Failed to connect: %s", strerror(errno));
+#endif
 		return -1;
 	}
 	
 	if(net_set_nonblocking(sockfd) < 0)
 	{
+#ifdef DEBUG
 		util_msgc("Error", "Failed to make socket nonblocking: %s", 
 			strerror(errno));
+#endif
 		return -1;
 	}
 	
+#ifdef DEBUG
 	util_msgc("Info", "Connected to [%s:%s]", addr, portno);
+#endif
 	
 	return sockfd;
 }

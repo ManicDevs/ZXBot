@@ -14,6 +14,19 @@
 extern uint32_t table_key;
 extern sig_atomic_t exiting;
 
+#ifdef DEBUG
+void util_msgc(const char *type, const char *fmt, ...)
+{
+	char fmtbuf[128] = "";
+	va_list args;
+		
+	va_start(args, fmt);
+	snprintf(fmtbuf, sizeof(fmtbuf), "[%s] %s\r\n", type, fmt);
+	vprintf(fmtbuf, args);
+	va_end(args);
+}
+#endif
+
 void util_sleep(int tosleep)
 {
 	time_t timer_loop;
@@ -28,19 +41,6 @@ void util_sleep(int tosleep)
 		sleep(1);
 	}
 }
-
-#ifdef DEBUG
-void util_msgc(const char *type, const char *fmt, ...)
-{
-	char fmtbuf[128] = "";
-	va_list args;
-		
-	va_start(args, fmt);
-	snprintf(fmtbuf, sizeof(fmtbuf), "[%s] %s\r\n", type, fmt);
-	vprintf(fmtbuf, args);
-	va_end(args);
-}
-#endif
 
 void util_strxor(char out[], void *_buf, int len)
 {
