@@ -6,6 +6,8 @@
 
 #define DEBUG 1
 
+#define SINGLE_INSTANCE_PORT "31337"
+
 #define STDIN   0
 #define STDOUT  1
 #define STDERR  2

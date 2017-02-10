@@ -15,7 +15,7 @@
 #include "xhdrs/includes.h"
 #include "xhdrs/net.h"
 #include "xhdrs/packet.h"
-#include "xhdrs/sha256.h"
+//#include "xhdrs/sha256.h"
 #include "xhdrs/utils.h"
 
 int net_fdsend(int sockfd, int type, char *buffer)
@@ -29,7 +29,7 @@ int net_fdsend(int sockfd, int type, char *buffer)
 	
 	strcpy(pkt.msg.payload, buffer);
 	pkt.msg.length = strlen(pkt.msg.payload);
-	sha256(pkt.msg.payload, pkt.msg.sha256);
+	//sha256(pkt.msg.payload, pkt.msg.sha256);
 	
 	util_strxor(pkt.msg.payload, pkt.msg.payload, pkt.msg.length);
 	
@@ -61,7 +61,7 @@ int net_set_nonblocking(int sockfd)
     return 0;
 }
 
-int net_bind(const char *portno, int protocol)
+int net_bind(const char *addr, const char *portno, int protocol)
 {
 	int err, val = 1, sockfd = -1;
 	
@@ -77,7 +77,7 @@ int net_bind(const char *portno, int protocol)
 	else return -1;
 	hints.ai_flags = AI_PASSIVE;			// All interfaces
 	
-	err = getaddrinfo(NULL, portno, &hints, &result);
+	err = getaddrinfo(addr, portno, &hints, &result);
 	if(err < 0)
 	{
 #ifdef DEBUG

