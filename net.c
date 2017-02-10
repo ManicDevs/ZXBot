@@ -38,7 +38,7 @@ int net_fdsend(int sockfd, int type, char *buffer)
 #ifdef DEBUG
 		util_msgc("Error", "Unable to send Packet!");
 #endif
-		return 1;
+		return -1;
 	}
 	
 	return 0;
