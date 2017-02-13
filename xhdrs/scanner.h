@@ -45,6 +45,4 @@ struct scanner_connection
 void scanner_init(void);
 void scanner_kill(void);
 
-
-
 #endif /* scanner_h */

