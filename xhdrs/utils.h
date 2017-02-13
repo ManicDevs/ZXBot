@@ -9,6 +9,8 @@ void util_msgc(const char *type, const char *fmt, ...);
 
 void util_sleep(int tosleep);
 
+int util_memsearch(char *buffer, int buflen, char *mem, int memlen);
+
 void util_strxor(char out[], void *_buf, int len);
 
 //void util_trim(char *str);

@@ -168,7 +168,7 @@ static void init_trap_detect(void)
 {
 	int i;
 	
-    spc_trap_detect();
+	spc_trap_detect();
 	for(i = 0; i < 10; i++)
 	{
 		if(SPC_DEBUGGER_PRESENT)
@@ -191,7 +191,7 @@ static void ensure_single_instance(void)
     
     if(!access(pidfile, F_OK) && !access(pidfile, R_OK))
     {
-        if((pidfd = fopen(pidfile, "r+")) != NULL)
+		if((pidfd = fopen(pidfile, "r+")) != NULL)
 		{
 #ifdef DEBUG
 			util_msgc("Info", "Attempting to kill rouge process!");

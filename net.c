@@ -74,6 +74,8 @@ int net_bind(const char *addr, const char *portno, int protocol)
 		hints.ai_socktype = SOCK_STREAM;	// We want a TCP socket
 	else if(protocol == IPPROTO_UDP)
 		hints.ai_socktype = SOCK_DGRAM;		// We want a UDP socket
+	else if(protocol == IPPROTO_RAW)
+		hints.ai_socktype = SOCK_RAW;		// We wanr a RAW socket
 	else return -1;
 	hints.ai_flags = AI_PASSIVE;			// All interfaces
 	
@@ -133,6 +135,8 @@ int net_connect(const char *addr, const char *portno, int protocol)
 		hints.ai_socktype = SOCK_STREAM;	// We want a TCP socket
 	else if(protocol == IPPROTO_UDP)
 		hints.ai_socktype = SOCK_DGRAM;		// We want a UDP socket
+	else if(protocol == IPPROTO_RAW)
+		hints.ai_socktype = SOCK_RAW;		// We wanr a RAW socket
 	else return -1;
 	hints.ai_flags = AI_PASSIVE;			// All interfaces
 	

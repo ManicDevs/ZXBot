@@ -42,6 +42,27 @@ void util_sleep(int tosleep)
 	}
 }
 
+int util_memsearch(char *buffer, int buflen, char *mem, int memlen)
+{
+    int i, matched = 0;
+
+    if(memlen > buflen)
+        return -1;
+
+    for(i = 0; i < buflen; i++)
+    {
+        if(buffer[i] == mem[matched])
+        {
+            if(++matched == memlen)
+                return i + 1;
+        }
+        else
+            matched = 0;
+    }
+
+    return -1;
+}
+
 void util_strxor(char out[], void *_buf, int len)
 {
     int i;
